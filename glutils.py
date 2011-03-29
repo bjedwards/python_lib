@@ -30,7 +30,6 @@ class gl_3d_window(object):
         GLUT.glutKeyboardFunc(self.on_key)
         GLUT.glutMouseFunc(self.on_click)
         GLUT.glutMotionFunc(self.on_mouse_motion)
-        GLUT.glutMouseWheelFunc(self.on_mouse_wheel)
         
         #this will call draw every refresh ms
         GLUT.glutTimerFunc(refresh, self.timer, refresh)
@@ -70,9 +69,9 @@ class gl_3d_window(object):
         if state == GLUT.GLUT_DOWN:
             self.mouse_down = True
             self.button = button
-            if self.button == 3:
+            if self.button == 3 or self.button == 5:
                 self.scale *= 1.1
-            if self.button == 4:
+            if self.button == 4 or self.button == 6:
                 self.scale *= 0.9
         else:
             self.mouse_down = False
@@ -91,17 +90,6 @@ class gl_3d_window(object):
             self.translate[1] -= dy * .01
         self.mouse_old[0] = x
         self.mouse_old[1] = y
-
-    def on_mouse_wheel(self, button, dir, x, y):
-        print button
-        print dir
-        print x
-        print y
-        if dir > 0:
-            self.scale *= .01
-        else:
-            self.scale *= 1.01
-
 
     ###END GL CALLBACKS
 
@@ -129,12 +117,13 @@ class gl_3d_window(object):
             GLUT.glutSwapBuffers()
         return draw_func
 
-def rend_func(pos,col,p_size):
+def rend_func(pos,col,p_size,edges,with_labels=False):
     import OpenGL.GL as GL
     GL.glEnable(GL.GL_POINT_SMOOTH)
     GL.glPointSize(p_size)
-    GL.glEnable(GL.GL_BLEND)
-    GL.glBlendFunc(GL.GL_SRC_ALPHA,GL.GL_ONE_MINUS_SRC_ALPHA)
+    #GL.glEnable(GL.GL_BLEND)
+    GL.glEnable(GL.GL_DEPTH_TEST)
+    #GL.glBlendFunc(GL.GL_SRC_ALPHA,GL.GL_ONE_MINUS_SRC_ALPHA)
     #col = np.random.random_sample((num,4))
     #pos = np.random.random_sample((num,4))
     GL.glColorPointer(4,GL.GL_FLOAT,0,col)
@@ -144,24 +133,65 @@ def rend_func(pos,col,p_size):
     GL.glDrawArrays(GL.GL_POINTS,0,len(pos))
     GL.glDisableClientState(GL.GL_COLOR_ARRAY)
     GL.glDisableClientState(GL.GL_VERTEX_ARRAY)
+    line_array = np.ndarray((len(edges)*2,4),dtype=np.float32)
+    k = 0
+    for (i,j) in edges:
+        line_array[k,:] = pos[i]
+        line_array[k+1:] = pos[j]
+        k += 2
+        GL.glBegin(GL.GL_LINES)
+        GL.glVertex3f(pos[i][0],pos[i][1],pos[i][2])
+        GL.glVertex3f(pos[j][0],pos[j][1],pos[j][2])
+        GL.glEnd()
+#    GL.glVertexPointer(4,GL.GL_FLOAT,0,line_array)
+#    GL.glEnableClientState(GL.GL_VERTEX_ARRAY)
+#    GL.glDrawArrays(GL.GL_LINES,0,len(line_array))
+#    GL.glDisableClientState(GL.GL_VERTEX_ARRAY)
+    if with_labels:
+        GL.glDisable(GL.GL_DEPTH_TEST)
+        i = 0
+        for p in pos:
+            GL.glRasterPos3f(p[0],p[1]+0.04,p[2])
+            GLUT.glutBitmapString(GLUT.GLUT_BITMAP_HELVETICA_10,str(i))
+            i+=1
+        GL.glEnable(GL.GL_DEPTH_TEST)
+   
 
 if __name__ == "__main__":
-    num = int(sys.argv[1])
-    refresh = int(sys.argv[2])
+    try:
+        num = int(sys.argv[1])
+    except:
+        num = 500
+    try:
+        refresh = int(sys.argv[2])
+    except:
+        refresh = 30
     try:
         p_size = int(sys.argv[3])
     except:
         p_size = 5
+    try:
+        num_edges = int(sys.argv[4])
+    except:
+        num_edges = 0
+    try:
+        with_labels = sys.argv[5] == "True"
+    except:
+        with_labels = False
     pos = np.ndarray((num,4),dtype=np.float32)
     pos[:,0] = np.random.random_sample((num,)) - 0.5
     pos[:,1] = np.random.random_sample((num,)) - 0.5
     pos[:,2] = np.random.random_sample((num,)) - 0.5
-    pos[:,3] = 0.75
+    pos[:,3] = 1.0
     col = np.ndarray((num,4),dtype=np.float32)
     rand_col = np.sqrt(pos[:,0]**2 + pos[:,1]**2 + pos[:,2]**2)/np.sqrt(3*(.5**2))
     col[:,0] = np.min([4*rand_col - 1.5,-4 * rand_col + 4.5],axis=0)
     col[:,1] = np.min([4*rand_col - 0.5,-4 * rand_col + 3.5],axis=0)
     col[:,2] = np.min([4*rand_col + 0.5,-4 * rand_col + 2.5],axis=0)
-    col[:.3] = 1.0
+    col[:.3] = 0.74
+
+    edges = []
+    for i in range(num_edges):
+        edges.append(np.random.randint(0,num,size=2))
     
-    gl_3d_window(render_func = rend_func,rf_args=(pos,col,p_size),refresh=refresh)
+    gl_3d_window(render_func = rend_func,rf_args=(pos,col,p_size,edges,with_labels),refresh=refresh)
