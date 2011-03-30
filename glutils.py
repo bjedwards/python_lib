@@ -5,17 +5,23 @@ import OpenGL.GLU as GLU
 import numpy as np
 import sys
 
+import networkx as nx
+from PIL import Image
+
 class gl_3d_window(object):
-    def __init__(self, width=640, height=480,title="",refresh=30,render_func=lambda : None, rf_args=(), rf_kwargs = {}):
+    def __init__(self, width=1080, height=1080,title="",refresh=30,render_func=lambda window: None, rf_args=(), rf_kwargs = {},save_file='./'):
         #mouse handling for transforming scene
         self.mouse_down = False
         self.mouse_old = np.array([0., 0.])
         self.rotate = np.array([0., 0., 0.])
         self.translate = np.array([0., 0., 0.])
         self.scale = 1.0
+        self.save_file = save_file
+        self.save_count = 0
 
         self.width = width
         self.height = height
+        self.lights = True
 
         GLUT.glutInit(sys.argv)
         GLUT.glutInitDisplayMode(GLUT.GLUT_RGBA | GLUT.GLUT_DOUBLE | GLUT.GLUT_DEPTH)
@@ -36,6 +42,8 @@ class gl_3d_window(object):
 
         #setup OpenGL scene
         self.glinit()
+        GLUT.glutSetOption(GLUT.GLUT_ACTION_ON_WINDOW_CLOSE,
+                           GLUT.GLUT_ACTION_CONTINUE_EXECUTION)
 
         #set up initial conditions
         #create our OpenCL instance
@@ -47,7 +55,7 @@ class gl_3d_window(object):
         GL.glViewport(0, 0, self.width, self.height)
         GL.glMatrixMode(GL.GL_PROJECTION)
         GL.glLoadIdentity()
-        GLU.gluPerspective(60., self.width / float(self.height), .1, 1000.)
+        GL.glOrtho(-1.,1.,-1,1.,-1000.,1000.)
         GL.glMatrixMode(GL.GL_MODELVIEW)
 
 
@@ -59,11 +67,26 @@ class gl_3d_window(object):
     def on_key(self, *args):
         ESCAPE = '\033'
         if args[0] == ESCAPE or args[0] == 'q':
-            sys.exit()
+            GLUT.glutLeaveMainLoop()
         elif args[0] == 'r':
             self.rotate = np.array([0., 0., 0.])
             self.translate = np.array([0., 0., 0.])
             self.scale = 1.0
+        elif args[0] == 'l':
+            if self.lights:
+                self.lights = False
+            else:
+                self.lights = True
+        elif args[0] == 's':
+            vp = GL.glGetIntegerv(GL.GL_VIEWPORT)
+            pixel_array = GL.glReadPixels(0,0,vp[2],vp[3],GL.GL_RGB,GL.GL_UNSIGNED_BYTE)
+
+            pilImage = Image.fromstring(mode="RGB",size=(vp[3],vp[2]),data=pixel_array)
+            pilImage = pilImage.transpose(Image.FLIP_TOP_BOTTOM)
+            pilImage.save(self.save_file + str(self.save_count) + '.png')
+            self.save_count += 1 
+            
+            
 
     def on_click(self, button, state, x, y):
         if state == GLUT.GLUT_DOWN:
@@ -110,52 +133,117 @@ class gl_3d_window(object):
             GL.glRotatef(self.rotate[1], 0, 1, 0) #we switched around the axis so make this rotate_z
             GL.glTranslatef(self.translate[0], self.translate[1], self.translate[2])
             GL.glScale(self.scale,self.scale,self.scale)
-        
-            #render the particles
-            f(*args,**kwargs)
+            GL.glShadeModel(GL.GL_SMOOTH)
+            GL.glLightfv(GL.GL_LIGHT0,GL.GL_POSITION, (1.,1.,0.))
+            GL.glLightfv(GL.GL_LIGHT0, GL.GL_AMBIENT, (0.,0.,0.,1.))
+            GL.glLightfv(GL.GL_LIGHT0, GL.GL_DIFFUSE, (1.0,1.0,1.0,1.0))
+            GL.glLightfv(GL.GL_LIGHT0, GL.GL_SPECULAR,(1.,1.,1.,1.))
+            GL.glLightModelfv(GL.GL_LIGHT_MODEL_AMBIENT,(.2,.2,.2,1.0))
+            GL.glEnable(GL.GL_LIGHT0)
+            GL.glEnable(GL.GL_COLOR_MATERIAL)
+            #GL.glColorMaterial(GL.GL_FRONT_AND_BACK,GL.GL_AMBIENT_AND_DIFFUSE)
+            #GL.glMaterial(GL.GL_FRONT_AND_BACK,GL.GL_SPECULAR,(1.,1.,1.,1.))
+            #GL.glMaterial(GL.GL_FRONT_AND_BACK,GL.GL_EMISSION, (0.,0.,0.,1.))
+            
+
+            f(self,*args,**kwargs)
 
             GLUT.glutSwapBuffers()
         return draw_func
 
-def rend_func(pos,col,p_size,edges,with_labels=False):
+def rend_func(window,pos,col,p_size,edges,with_labels=False,with_arrows=True,scale=1.0):
     import OpenGL.GL as GL
     GL.glEnable(GL.GL_POINT_SMOOTH)
     GL.glPointSize(p_size)
-    #GL.glEnable(GL.GL_BLEND)
     GL.glEnable(GL.GL_DEPTH_TEST)
-    #GL.glBlendFunc(GL.GL_SRC_ALPHA,GL.GL_ONE_MINUS_SRC_ALPHA)
-    #col = np.random.random_sample((num,4))
-    #pos = np.random.random_sample((num,4))
-    GL.glColorPointer(4,GL.GL_FLOAT,0,col)
-    GL.glVertexPointer(4,GL.GL_FLOAT,0,pos)
-    GL.glEnableClientState(GL.GL_VERTEX_ARRAY)
-    GL.glEnableClientState(GL.GL_COLOR_ARRAY)
-    GL.glDrawArrays(GL.GL_POINTS,0,len(pos))
-    GL.glDisableClientState(GL.GL_COLOR_ARRAY)
-    GL.glDisableClientState(GL.GL_VERTEX_ARRAY)
-    line_array = np.ndarray((len(edges)*2,4),dtype=np.float32)
+    draw_edges(pos,edges)
+    if with_arrows:
+        draw_arrows(pos,edges,1/window.scale,window.lights,p_size)
+    draw_nodes(pos,col,p_size)
+    if with_labels:
+        draw_labels(pos,map(str,range(len(pos))))
+
+def draw_labels(pos,labels):
+    GL.glDisable(GL.GL_DEPTH_TEST)
+    GL.glColor3f(0.,0.,0.)
+    i = 0
+    for l in labels:
+        GL.glRasterPos3f(pos[i][0],pos[i][1],pos[i][2])
+        GLUT.glutBitmapString(GLUT.GLUT_BITMAP_HELVETICA_10,l)
+        i+=1
+    GL.glEnable(GL.GL_DEPTH_TEST)
+        
+def draw_nodes(pos,col,p_size):
+    GL.glColor3f(1.,1.,1.)
+    GL.glPointSize(p_size+3)
+    GL.glDisable(GL.GL_DEPTH_TEST)
+    GL.glBegin(GL.GL_POINTS)
+    for p in pos:
+        GL.glVertex3f(p[0],p[1],p[2])
+    GL.glEnd()
+    i = 0
+    GL.glPointSize(p_size)
+    GL.glBegin(GL.GL_POINTS)
+    for p in pos:
+        GL.glColor3f(col[i][0],col[i][1],col[i][2])
+        GL.glVertex3f(p[0],p[1],p[2])
+        i+=1
+    GL.glEnd()
+    GL.glEnable(GL.GL_DEPTH_TEST)
+
+def draw_edges(pos,edges,edge_colors=[]):
+    #Parse color stuff later, for single colors etc
+    if len(edge_colors) < len(edges):
+        edge_colors = edge_colors + [np.array([1.,1.,1.])]*(len(edges) - len(edge_colors))
+    GL.glBegin(GL.GL_LINES)
     k = 0
     for (i,j) in edges:
-        line_array[k,:] = pos[i]
-        line_array[k+1:] = pos[j]
-        k += 2
-        GL.glBegin(GL.GL_LINES)
+        GL.glColor3f(edge_colors[k][0],edge_colors[k][1],edge_colors[k][2])
         GL.glVertex3f(pos[i][0],pos[i][1],pos[i][2])
         GL.glVertex3f(pos[j][0],pos[j][1],pos[j][2])
-        GL.glEnd()
-#    GL.glVertexPointer(4,GL.GL_FLOAT,0,line_array)
-#    GL.glEnableClientState(GL.GL_VERTEX_ARRAY)
-#    GL.glDrawArrays(GL.GL_LINES,0,len(line_array))
-#    GL.glDisableClientState(GL.GL_VERTEX_ARRAY)
-    if with_labels:
-        GL.glDisable(GL.GL_DEPTH_TEST)
-        i = 0
-        for p in pos:
-            GL.glRasterPos3f(p[0],p[1]+0.04,p[2])
-            GLUT.glutBitmapString(GLUT.GLUT_BITMAP_HELVETICA_10,str(i))
-            i+=1
-        GL.glEnable(GL.GL_DEPTH_TEST)
-   
+        k+=1
+    GL.glEnd()
+
+def draw_arrows(pos,edges,scale,lights,p_size,edge_colors=[]):
+    if len(edge_colors) < len(edges):
+        edge_colors = edge_colors + [np.array([1.,1.,1.])]*(len(edges) - len(edge_colors))
+    GL.glDisable(GL.GL_DEPTH_TEST)
+    if lights:
+        GL.glEnable(GL.GL_LIGHTING)
+    for (i,j) in edges:
+        d = pos[i][0:3] - pos[j][0:3]
+        c = np.array([0,0,1])
+        mm = GL.glGetDoublev(GL.GL_MODELVIEW_MATRIX)
+        pm = GL.glGetDoublev(GL.GL_PROJECTION_MATRIX)
+        vp = GL.glGetIntegerv(GL.GL_VIEWPORT)
+        pjwx,pjwy,pjwz = GLU.gluProject(pos[j][0],pos[j][1],pos[j][2],mm,pm,vp)
+        piwx,piwy,piwz = GLU.gluProject(pos[i][0],pos[i][1],pos[i][2],mm,pm,vp)
+        nw = np.array([pjwx-piwx,pjwy-piwy,pjwz,piwz])
+        nw = nw/np.sqrt(np.dot(nw,nw.conj()))
+        cone_stopw = [pjwx-(p_size/2.)*nw[0],
+                      pjwy-(p_size/2.)*nw[1],
+                      pjwz-(p_size/2.)*nw[2]]
+        cone_stop = np.array([0.,0.,0.])
+        cone_stop[0],cone_stop[1],cone_stop[2] = GLU.gluUnProject(cone_stopw[0],
+                                                                  cone_stopw[1],
+                                                                  cone_stopw[2],
+                                                                  mm,
+                                                                  pm,
+                                                                  vp)
+        
+        GL.glPushMatrix()
+        theta = np.arccos(np.dot(d,c))*(180./np.pi)
+        GL.glTranslate(cone_stop[0],cone_stop[1],cone_stop[2])
+        GL.glRotate(theta,pos[j][1]-pos[i][1],pos[i][0]-pos[j][0],0)
+        GL.glScale(scale,scale,scale)
+        cone = GLU.gluNewQuadric()
+        GLU.gluQuadricNormals(cone,GLU.GLU_SMOOTH)
+        GLU.gluQuadricTexture(cone,GLU.GLU_TRUE)
+        GLU.gluCylinder(GLU.gluNewQuadric(),0,np.sqrt(p_size/20.)*.025,np.sqrt(p_size/20.)*.05,32,32)
+        GL.glPopMatrix()
+    if lights:
+        GL.glDisable(GL.GL_LIGHTING)
+    GL.glEnable(GL.GL_DEPTH_TEST)
 
 if __name__ == "__main__":
     try:
@@ -169,29 +257,41 @@ if __name__ == "__main__":
     try:
         p_size = int(sys.argv[3])
     except:
-        p_size = 5
+        p_size = 20
     try:
-        num_edges = int(sys.argv[4])
+        with_labels = sys.argv[4] == "True"
     except:
-        num_edges = 0
+        with_labels = True
     try:
-        with_labels = sys.argv[5] == "True"
+        with_arrows = sys.argv[5] == "True"
     except:
-        with_labels = False
-    pos = np.ndarray((num,4),dtype=np.float32)
-    pos[:,0] = np.random.random_sample((num,)) - 0.5
-    pos[:,1] = np.random.random_sample((num,)) - 0.5
-    pos[:,2] = np.random.random_sample((num,)) - 0.5
-    pos[:,3] = 1.0
-    col = np.ndarray((num,4),dtype=np.float32)
-    rand_col = np.sqrt(pos[:,0]**2 + pos[:,1]**2 + pos[:,2]**2)/np.sqrt(3*(.5**2))
-    col[:,0] = np.min([4*rand_col - 1.5,-4 * rand_col + 4.5],axis=0)
-    col[:,1] = np.min([4*rand_col - 0.5,-4 * rand_col + 3.5],axis=0)
-    col[:,2] = np.min([4*rand_col + 0.5,-4 * rand_col + 2.5],axis=0)
-    col[:.3] = 0.74
-
-    edges = []
-    for i in range(num_edges):
-        edges.append(np.random.randint(0,num,size=2))
+        with_arrows = False
+    #pos = np.ndarray((num,4),dtype=np.float32)
+    #pos[:,0] = np.random.random_sample((num,)) - 0.5
+    #pos[:,1] = np.random.random_sample((num,)) - 0.5
+    #pos[:,2] = np.random.random_sample((num,)) - 0.5
+    #pos[:,3] = 1.0
     
-    gl_3d_window(render_func = rend_func,rf_args=(pos,col,p_size,edges,with_labels),refresh=refresh)
+    #col[:,0] = 1.0
+    #col[:,1] = 0.0
+    #col[:,2] = 0.0
+    #col[:.3] = 0.74
+    #G = nx.barabasi_albert_graph(num,2)
+    G = nx.fast_gnp_random_graph(num,5./num)
+    pos_dict = nx.fruchterman_reingold_layout(G,dim=3)
+    #pos_dict = nx.spectral_layout(G,dim=3)
+    sort_nodes = sorted(G.nodes())
+    xmid = np.mean([pos_dict[n][0] for n in sort_nodes])
+    ymid = np.mean([pos_dict[n][1] for n in sort_nodes])
+    zmid = np.mean([pos_dict[n][2] for n in sort_nodes])
+    pos = np.array([pos_dict[n] - np.array([xmid,ymid,zmid]) for n in sort_nodes])
+    col = np.ndarray((num,4),dtype=np.float32)
+    dc = nx.degree_centrality(G)
+    max_dc = np.max(dc.values())
+    deg_col = np.array([dc[n]/max_dc for n in sort_nodes])
+    #rand_col = np.sqrt(pos[:,0]**2 + pos[:,1]**2 + pos[:,2]**2)/np.sqrt(3*(.5**2))
+    col[:,0] = np.min([4*deg_col - 1.5,-4 * deg_col + 4.5],axis=0)
+    col[:,1] = np.min([4*deg_col - 0.5,-4 * deg_col + 3.5],axis=0)
+    col[:,2] = np.min([4*deg_col + 0.5,-4 * deg_col + 2.5],axis=0)
+    gl_3d_window(render_func = rend_func,rf_args=(pos,col,p_size,G.edges(),with_labels,with_arrows),refresh=refresh)
+
