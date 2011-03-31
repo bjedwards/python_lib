@@ -1,58 +1,195 @@
-def rend_func(window,pos,col,p_size,edges,with_labels=False,with_arrows=True,scale=1.0):
+import networkx as nx
+import matplotlib.colors as colors
+import OpenGL.GL as GL
+import OpenGL.GLU as GLU
+import OpenGL.GLUT as GLUT
+
+import gl_windows as glw
+
+def draw_opengl_3d(G,
+                   pos=None,
+                   nodelist=None,
+                   node_size=20,
+                   node_color=(1.,0.,0.,1.),
+                   node_border_size=3,
+                   edgelist=None,
+                   edge_color=(0.,0.,0.,1.),
+                   edge_style='solid',
+                   edge_thickness=1.0,
+                   with_arrows=True,
+                   with_node_labels=True,
+                   node_labels=None,
+                   node_font_size=12,
+                   node_label_color=(0.,0.,0.,1.),
+                   with_edge_labels=False,
+                   edge_labels=None,
+                   edge_font_size=12,
+                   edge_font_color=(0.,0.,0.,1.)):
+    try:
+        import OpenGL.GL as GL
+        import OpenGL.GLU as GLU
+        import OpenGL.GLUT as GLUT
+    except ImportError:
+        raise ImportError("PyOpenGl, with working OpenGL, GLU, and GLUT libraries")
+    if pos is None:
+        pos=nx.drawing.spring_layout(G,dim=3)
+        for n in pos:
+            pos[n] = map(lambda x: x-.5,pos[n])
+    if nodelist is None:
+        nodelist = G.nodes()
+
+    node_size = parse_numeric_value(node_size,len(nodelist),"Node Size")
+    node_color = parse_color_value(node_color,len(nodelist),"Node Color")
+    node_border_size = parse_numeric_value(node_border_size,
+                                           len(nodelist),
+                                           "Node Border Size")
+    if edgelist is None:
+        edgelist = G.edges()
+    edge_color = parse_color_value(edge_color,len(edgelist),"Edge Color")
+    edge_thickness = parse_numeric_value(edge_thickness,
+                                         len(edgelist),
+                                         "Edge Thickness")
+    if with_node_labels and node_labels is None:
+        node_labels = map(str,nodelist)
+
+        node_label_color = parse_color_value(node_label_color,
+                                             len(node_labels),
+                                             "Node Label Color")
+    glw.gl_3d_window(background_color=(1.,1.,1.,1.),
+                     refresh=10,
+                     height=480,
+                     width=480,
+                     render_func=rend_func,
+                     rf_args=(pos,nodelist,node_size,node_color,node_border_size,edgelist,edge_color,edge_style,edge_thickness,with_arrows,with_node_labels,node_labels,node_font_size,node_label_color, with_edge_labels,edge_labels,edge_font_size,edge_font_color))
+
+
+def draw_opengl_2d(G,
+                   pos=None,
+                   nodelist=None,
+                   node_size=20,
+                   node_color=(1.,0.,0.,1.),
+                   node_border_size=3,
+                   edgelist=None,
+                   edge_color=(0.,0.,0.,1.),
+                   edge_style='solid',
+                   edge_thickness=1.0,
+                   with_arrows=True,
+                   with_node_labels=True,
+                   node_labels=None,
+                   node_font_size=12,
+                   node_label_color=(0.,0.,0.,1.),
+                   with_edge_labels=False,
+                   edge_labels=None,
+                   edge_font_size=12,
+                   edge_font_color=(0.,0.,0.,1.)):
+    try:
+        import OpenGL.GL as GL
+        import OpenGL.GLU as GLU
+        import OpenGL.GLUT as GLUT
+    except ImportError:
+        raise ImportError("PyOpenGl, with working OpenGL, GLU, and GLUT libraries")
+    if pos is None:
+        pos=nx.drawing.spring_layout(G,dim=2)
+        for n in pos:
+            pos[n] = map(lambda x: x-.5,pos[n])
+    if nodelist is None:
+        nodelist = G.nodes()
+
+    node_size = parse_numeric_value(node_size,len(nodelist),"Node Size")
+    node_color = parse_color_value(node_color,len(nodelist),"Node Color")
+    node_border_size = parse_numeric_value(node_border_size,
+                                           len(nodelist),
+                                           "Node Border Size")
+    if edgelist is None:
+        edgelist = G.edges()
+    edge_color = parse_color_value(edge_color,len(edgelist),"Edge Color")
+    edge_thickness = parse_numeric_value(edge_thickness,
+                                         len(edgelist),
+                                         "Edge Thickness")
+    if with_node_labels and node_labels is None:
+        node_labels = map(str,nodelist)
+
+        node_label_color = parse_color_value(node_label_color,
+                                             len(node_labels),
+                                             "Node Label Color")
+    glw.gl_2d_window(background_color=(1.,1.,1.,1.),
+                     refresh=10,
+                     height=480,
+                     width=480,
+                     render_func=rend_func,
+                     rf_args=(pos,nodelist,node_size,node_color,node_border_size,edgelist,edge_color,edge_style,edge_thickness,with_arrows,with_node_labels,node_labels,node_font_size,node_label_color, with_edge_labels,edge_labels,edge_font_size,edge_font_color))
+
+def parse_numeric_value(x,n,description):
+    if type(x) is int or type(x) is float:
+        return [x]*n
+    else:
+        if not len(x)==n:
+            raise RuntimeError("Dimensions of " + description + " do not match")
+
+def parse_color_value(c,n,description):
+    if type(c) is tuple:
+        return [c]*n
+    elif type(c) is string:
+        return [colors.colorConverter.to_rgba(c)]*n
+    else:
+        if not len(c)==n:
+            raise RuntimeError("Dimensions of " + description + " do not match")
+
+def rend_func(window,
+              pos,
+              nodelist,
+              node_size,
+              node_color,
+              node_border_size,
+              edgelist,
+              edge_color,
+              edge_style,
+              edge_thickness,
+              with_arrows,
+              with_node_labels,
+              node_labels,
+              node_font_size,
+              node_label_color,
+              with_edge_labels,
+              edge_labels,
+              edge_font_size,
+              edge_font_color):
+    
     GL.glEnable(GL.GL_POINT_SMOOTH)
-    GL.glPointSize(p_size)
+    GL.glEnable(GL.GL_LINE_SMOOTH)
     GL.glEnable(GL.GL_DEPTH_TEST)
-    draw_edges(pos,edges)
+    draw_edges(pos,edgelist,edge_color,edge_thickness)
+    """
     if with_arrows:
-        draw_arrows(pos,edges,1/window.scale,window.lights,p_size)
-    draw_nodes(pos,col,p_size)
-    if with_labels:
-        draw_labels(pos,map(str,range(len(pos))))
+        draw_arrows(pos,
+                    edgelist,
+                    edge_color,
+                    1/window.scale,
+                    window.lights,
+                    p_size)
+                    """
+    draw_nodes(pos,nodelist,node_color,node_size,node_border_size)
+    if with_node_labels:
+        draw_node_labels(pos,nodelist,node_labels,node_label_color)
 
-def draw_labels(pos,labels):
-    GL.glDisable(GL.GL_DEPTH_TEST)
-    GL.glColor3f(0.,0.,0.)
-    i = 0
-    for l in labels:
-        GL.glRasterPos3f(pos[i][0],pos[i][1],pos[i][2])
-        GLUT.glutBitmapString(GLUT.GLUT_BITMAP_HELVETICA_10,l)
-        i+=1
-    GL.glEnable(GL.GL_DEPTH_TEST)
-        
-def draw_nodes(pos,col,p_size):
-    GL.glColor3f(1.,1.,1.)
-    GL.glPointSize(p_size+3)
-    GL.glDisable(GL.GL_DEPTH_TEST)
-    GL.glBegin(GL.GL_POINTS)
-    for p in pos:
-        GL.glVertex3f(p[0],p[1],p[2])
-    GL.glEnd()
-    i = 0
-    GL.glPointSize(p_size)
-    GL.glBegin(GL.GL_POINTS)
-    for p in pos:
-        GL.glColor3f(col[i][0],col[i][1],col[i][2])
-        GL.glVertex3f(p[0],p[1],p[2])
-        i+=1
-    GL.glEnd()
-    GL.glEnable(GL.GL_DEPTH_TEST)
-
-def draw_edges(pos,edges,edge_colors=[]):
+def draw_edges(pos,edgelist,edge_colors,edge_thickness):
     #Parse color stuff later, for single colors etc
-    if len(edge_colors) < len(edges):
-        edge_colors = edge_colors + [np.array([1.,1.,1.])]*(len(edges) - len(edge_colors))
-    GL.glBegin(GL.GL_LINES)
     k = 0
-    for (i,j) in edges:
-        GL.glColor3f(edge_colors[k][0],edge_colors[k][1],edge_colors[k][2])
-        GL.glVertex3f(pos[i][0],pos[i][1],pos[i][2])
-        GL.glVertex3f(pos[j][0],pos[j][1],pos[j][2])
+    for (i,j) in edgelist:
+        GL.glLineWidth(edge_thickness[k])
+        GL.glBegin(GL.GL_LINES)
+        GL.glColor(*tuple(edge_colors[k]))
+        GL.glVertex(*tuple(pos[i]))
+        GL.glVertex(*tuple(pos[j]))
+        GL.glEnd()
         k+=1
-    GL.glEnd()
-
-def draw_arrows(pos,edges,scale,lights,p_size,edge_colors=[]):
-    if len(edge_colors) < len(edges):
-        edge_colors = edge_colors + [np.array([1.,1.,1.])]*(len(edges) - len(edge_colors))
+"""
+def draw_arrows(pos,
+                edgelist,
+                edge_color,
+                scale,
+                lights,
+                p_size):
     GL.glDisable(GL.GL_DEPTH_TEST)
     if lights:
         GL.glEnable(GL.GL_LIGHTING)
@@ -90,6 +227,35 @@ def draw_arrows(pos,edges,scale,lights,p_size,edge_colors=[]):
     if lights:
         GL.glDisable(GL.GL_LIGHTING)
     GL.glEnable(GL.GL_DEPTH_TEST)
+"""
+def draw_node_labels(pos,nodelist,node_labels,node_label_colors):
+    GL.glDisable(GL.GL_DEPTH_TEST)
+    i = 0
+    for n in nodelist:
+        GL.glRasterPos(*tuple(pos[n]))
+        GL.glColor(*node_label_colors[i])
+        GLUT.glutBitmapString(GLUT.GLUT_BITMAP_HELVETICA_10,node_labels[i])
+        i+=1
+    GL.glEnable(GL.GL_DEPTH_TEST)
+        
+def draw_nodes(pos,nodelist,node_color,node_size,node_border_size):
+    GL.glDisable(GL.GL_DEPTH_TEST)
+    i = 0
+    for n in nodelist:
+        GL.glPointSize(node_size[i]+node_border_size[i])
+        GL.glBegin(GL.GL_POINTS)
+        GL.glColor(0.,0.,0.)
+        GL.glVertex(*tuple(pos[n]))
+        GL.glEnd()
+
+        GL.glPointSize(node_size[i])
+        GL.glBegin(GL.GL_POINTS)
+        GL.glColor(*node_color[i])
+        GL.glVertex(*tuple(pos[n]))
+        GL.glEnd()
+        i+=1
+    GL.glEnable(GL.GL_DEPTH_TEST)
+
 
 if __name__ == "__main__":
     try:

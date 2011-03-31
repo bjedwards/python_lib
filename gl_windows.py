@@ -10,27 +10,46 @@ import networkx as nx
 from PIL import Image
 
 class gl_3d_window(object):
-    def __init__(self, width=1080, height=1080,title="",refresh=15,render_func=lambda window: None, rf_args=(), rf_kwargs = {},save_file='./'):
-        #mouse handling for transforming scene
+    def __init__(self,
+                 width=1080,
+                 height=1080,
+                 title="",
+                 refresh=15,
+                 background_color = (0.,0.,0.,0.),
+                 render_func=lambda window: None,
+                 rf_args=(),
+                 rf_kwargs = {},
+                 save_file='./',
+                 save_file_type=None):
+
+        pid = os.fork()
+        if not pid==0:
+            return None
         self.mouse_down = False
         self.mouse_old = np.array([0., 0.])
         self.rotate = np.array([0., 0., 0.])
         self.translate = np.array([0., 0., 0.])
         self.scale = 1.0
-        self.save_file = save_file
+
+        split_path_ext = os.path.splitext(save_file)
+        self.save_file = split_path_ext[0]
+        if save_file_type is None:
+            self.save_file_ext = split_path_ext[1]
+            if self.save_file_ext == '':
+                self.save_file_ext = '.png'
+        else:
+            self.save_file_ext = save_file_type
         self.save_count = 0
 
         self.width = width
         self.height = height
         self.lights = True
         
-        pid = os.fork() # This is a hack to make it work in the interpreter
-        if not pid==0:
-            return
-        
+         
+
         GLUT.glutInit()
         
-        GLUT.glutInitDisplayMode(GLUT.GLUT_RGBA | GLUT.GLUT_DOUBLE | GLUT.GLUT_DEPTH)
+        GLUT.glutInitDisplayMode(GLUT.GLUT_RGBA | GLUT.GLUT_DOUBLE)
         GLUT.glutInitWindowSize(self.width, self.height)
         GLUT.glutInitWindowPosition(0, 0)
         self.win = GLUT.glutCreateWindow(title)
@@ -49,11 +68,11 @@ class gl_3d_window(object):
 
         #setup OpenGL scene
         self.glinit()
-
-
+        GL.glClearColor(*background_color)
         #set up initial conditions
         #create our OpenCL instance
         GLUT.glutMainLoop()
+
         
 
     def glinit(self):
@@ -302,7 +321,17 @@ if __name__ == "__main__":
     gl_3d_window(render_func = rend_func,rf_args=(pos,col,p_size,G.edges(),with_labels,with_arrows),refresh=refresh)
 
 class gl_2d_window(object):
-    def __init__(self, width=1080, height=1080,title="",refresh=15,background_color = (0.,0.,0.,0.),render_func=lambda window: None, rf_args=(), rf_kwargs = {},save_file='./',save_file_type=None):
+    def __init__(self,
+                 width=1080,
+                 height=1080,
+                 title="",
+                 refresh=15,
+                 background_color = (0.,0.,0.,0.),
+                 render_func=lambda window: None,
+                 rf_args=(),
+                 rf_kwargs = {},
+                 save_file='./',
+                 save_file_type=None):
 
         pid = os.fork()
         if not pid==0:
@@ -321,8 +350,6 @@ class gl_2d_window(object):
                 self.save_file_ext = '.png'
         else:
             self.save_file_ext = save_file_type
-        print self.save_file
-        print self.save_file_ext
         self.save_count = 0
 
         self.width = width
