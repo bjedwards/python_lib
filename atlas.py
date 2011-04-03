@@ -71,6 +71,7 @@ if __name__ == '__main__':
     import nx_opengl
     # layout graphs with positions using graphviz neato
 #    pos=nx.spring_layout(G)
+    pos = nx.graphviz_layout(G,prog='neato')
     """
     max_pos_x = max([pos[n][0] for n in pos])
     min_pos_x = min([pos[n][0] for n in pos])
@@ -87,8 +88,9 @@ if __name__ == '__main__':
         c=random.random() # random color...
         for n in g.nodes():
             colors[n] = c
-    nx_opengl.draw_opengl(G,3,
-                          node_size=5,
+    nx_opengl.draw_opengl(G,
+		          pos,
+                          node_size=10,
                           node_color=colors,
                           with_node_labels=False,
-                          gl_fancy_nodes=True)
+                          dim=2)
