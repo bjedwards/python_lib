@@ -196,7 +196,6 @@ class gl_window(object):
                     raise ImportError("Cannot Find appropriate Image Library, for Saving")
             vp = GL.glGetIntegerv(GL.GL_VIEWPORT)
             pixel_array = GL.glReadPixels(0,0,vp[2],vp[3],GL.GL_RGB,GL.GL_UNSIGNED_BYTE)
-
             pilImage = Image.fromstring(mode="RGB",size=(vp[3],vp[2]),data=pixel_array)
             pilImage = pilImage.transpose(Image.FLIP_TOP_BOTTOM)
             pilImage.save(self.save_file + str(self.save_count) + '.png')

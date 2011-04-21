@@ -163,11 +163,8 @@ class ePool(multiprocessing.pool.Pool):
                                                 chunksize,
                                                 max_len,
                                                 callback)
-        try:
-            self._taskqueue.put((((result._job, i, mapstar, (x,), {})
-                                  for i, x in enumerate(task_batches)), None))
-        except KeyboardInterrupt:
-            self._terminate()
+        self._taskqueue.put((((result._job, i, mapstar, (x,), {})
+                              for i, x in enumerate(task_batches)), None))
         return result
 
     def reduce(self, func, iterable, initial=None,chunksize=None,callback=None):
@@ -494,9 +491,6 @@ class ePool(multiprocessing.pool.Pool):
         results = self.emap(None,*seqs,chunksize=chunksize,callback=callback)
 
         return results[:min_len]
-    def __call__(self,f,*args,**kwargs):
-        return self.apply_async(f,args=args,kwds=kwargs)
-        
         
     
 def pmap(func,sequence,*sequences,**kw):

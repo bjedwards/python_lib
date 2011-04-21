@@ -1,6 +1,11 @@
 import matplotlib.pyplot as plt
 import stats.general as st
 
+def plot_tuples(l,*args,**kwargs):
+    X = [x[0] for x in l]
+    Y = [y[1] for y in l]
+    return plt.plot(X,Y,*args,**kwargs)
+
 def plot_dict(d,*args,**kwargs):
     X = sorted(d.keys())
     Y = [d[x] for x in X]

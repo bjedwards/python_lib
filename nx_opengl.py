@@ -158,11 +158,11 @@ def draw_opengl(G,
         max_pos = {}
         min_pos = {}
         for d in range(dim):
-            max_pos[d] = max([pos[n][d] for n in pos])
-            min_pos[d] = min([pos[n][d] for n in pos])
+            max_pos[d] = float(max([pos[n][d] for n in pos]))
+            min_pos[d] = float(min([pos[n][d] for n in pos]))
 
         for n in pos:
-            pos[n] = tuple([1.9*((pos[n][d]-min_pos[d])/(max_pos[d]-min_pos[d])-.5) for d in range(dim)])
+            pos[n] = tuple([1.7*((pos[n][d]-min_pos[d])/(max_pos[d]-min_pos[d])-.5) for d in range(dim)])
     
     if nodelist is None:
         nodelist = G.nodes()
@@ -290,8 +290,10 @@ def parse_color_value(c,n,cmap,description):
             tc = type(c[0])
             if tc is tuple or tc is str:
                 return map(colors.colorConverter.to_rgba,c)
-            elif tc is float:
-                return map(cmap,c)
+            elif tc is float or tc is int:
+                c_max = float(max(c))
+                c_min = float(min(c))
+                return map(cmap,[(ci - c_min)/(c_max-c_min) for ci in c])
             else:
                 return c
 
@@ -601,7 +603,7 @@ def draw_nodes(pos,
             GL.glTranslate(*position)
             GL.glScale(scale,scale,scale)
 
-            GL.glColor(*node_color[i])
+            GL.glColor(*tuple(node_color[i]))
             sphere = GLU.gluNewQuadric()
             GLU.gluQuadricNormals(sphere,GLU.GLU_SMOOTH)
             GLU.gluQuadricTexture(sphere,GLU.GLU_TRUE)
