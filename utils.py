@@ -39,7 +39,7 @@ def weighted_random_choice(w,cumulative=False):
     if not cumulative:
         cs = list(cumulative_sum(w.values()))
     else:
-        cs = [w[k] for k in sorted(w.values())]
+        cs = [v for v in sorted(w.values())]
     key_ind = dict(zip(range(len(w)),w.keys()))
     rnd = random.random()*cs[-1]
     rand_ret = bisect.bisect_left(cs,rnd)
