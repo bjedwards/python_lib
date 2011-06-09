@@ -89,3 +89,22 @@ def plot_dual_y(xs,
     ax1.plot(xs,ys1,*args1,**kwargs1)
     ax2.plot(xs,ys2,*args2,**kwargs2)
     return ax1,ax2
+
+def plot_dual_y_date(dates,
+                     ys1,
+                     ys2,
+                     args1=(),
+                     args2=(),
+                     kwargs1={},
+                     kwargs2={},
+                     ax1=None,
+                     ax2=None):
+    if ax1 is None:
+        plt.clf()
+        fig = plt.gcf()
+        ax1 = fig.add_subplot(111)
+    if ax2 is None:
+        ax2 = ax1.twinx()
+    ax1.plot_date(dates,ys1,*args1,**kwargs1)
+    ax2.plot_date(dates,ys2,*args2,**kwargs2)
+    return ax1,ax2

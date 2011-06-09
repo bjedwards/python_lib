@@ -385,7 +385,7 @@ def rmse_pdf(xs,ys):
     rms: Numeric
     """
 
-    data_range = list(set(xs)) + list(set(ys))
+    data_range = list(set(xs+ys))
     pdf_x = prob_density_func(xs, norm=True, data_range=data_range)
     pdf_y = prob_density_func(ys, norm=True, data_range=data_range)
 
@@ -405,7 +405,99 @@ def rmse_cdf(xs,ys):
     rms: Numeric
     """
 
-    data_range = list(set(xs)) + list(set(ys))
+    data_range = list(set(xs+ys))
     cdf_x = cum_density_func(xs, norm=True, data_range=data_range)
     cdf_y = cum_density_func(ys, norm=True, data_range=data_range)
     return rmse(cdf_x, cdf_y, include_absent=False)
+
+def area_diff_ccdf(xs,ys):
+    data_range = sorted(list(set(xs + ys)))
+    ccdf_x = comp_cum_distribution(xs, norm=True, data_range=data_range)
+    ccdf_y = comp_cum_distribution(ys, norm=True, data_range=data_range)
+    return area_diff(ccdf_x,ccdf_y,interpolate=False,ccdf=True)
+
+def area_diff(X1,X2,interpolate=True,ccdf=False):
+    if interpolate:
+        Y1,Y2 = interpolate_dicts(X1,X2,ccdf)
+    else:
+        if sorted(X1.keys()) != sorted(X2.keys()):
+            raise Exception("Dictionaries must have same keys if not \
+                             interpolating!")
+        else:
+            Y1 = X1
+            Y2 = X2
+    data_range = sorted(Y1.keys())
+    max_value = max(Y1.values()+Y2.values())
+    min_value = min(Y1.values()+Y2.values())
+    total_area = (max(data_range)-min(data_range))*(max_value-min_value)
+    area_bet = 0.0
+    for i in range(1,len(data_range)):
+        x0 = data_range[i-1]
+        x1 = data_range[i]
+        b0 = abs(Y1[x0] - Y2[x0])
+        b1 = abs(Y1[x1] - Y2[x1])
+        h = x1-x0
+        if Y1[x0]>=Y2[x0] and Y1[x1]>=Y2[x1]:
+            #Trapezoid
+            area_bet += .5 * h * (b0 + b1)
+        elif Y1[x0]<Y2[x0] and Y1[x1]<Y2[x1]:
+            #Trapezoid
+            area_bet += .5 * h * (b0 + b1)
+        elif Y1[x0]>=Y2[x0] and Y1[x1] < Y2[x1]:
+            #Two Triangles
+            area_bet += .5*b0*h*(b0/(b0+b1))
+            area_bet += .5*b1*h*(b1/(b0+b1))
+        else:
+            #Two Triangles
+            area_bet += .5*b0*h*(b0/(b0+b1))
+            area_bet += .5*b1*h*(b1/(b0+b1))
+        area_bet
+    return area_bet/total_area
+    
+def interpolate_dicts(X1,X2,ccdf=False):
+    data_range = sorted(list(set(X1.keys()+X2.keys())))
+    Y1 = {}
+    Y2 = {}
+    K1 = sorted(X1.keys())
+    K2 = sorted(X2.keys())
+    i1 = 0
+    i2 = 0
+    for k in data_range:
+        # If already there add them
+        if k in K1:
+            Y1[k] = X1[k]
+            i1 += 1
+        else: #interpolate
+            if i1 == 0:
+                if ccdf:
+                    Y1[k] = 1.0
+                else:
+                    Y1[k] = X1[K1[0]]
+            elif i1 == len(K1):
+                if ccdf:
+                    Y1[k] = 0.0
+                else:
+                    Y1[k] = X1[K1[-1]]
+            else:
+                m = (X1[K1[i1]] - X1[K1[i1-1]])/(K1[i1]-K1[i1-1])
+                b = X1[K1[i1]] - m*K1[i1]
+                Y1[k] = m*k + b
+        if k in K2:
+            Y2[k] = X2[k]
+            i2 += 1
+        else:
+            if i2 == 0:
+                if ccdf:
+                    Y2[k] = 1.0
+                else:
+                    Y2[k] = X2[K2[0]]
+            elif i2 == len(K2):
+                if ccdf:
+                    Y2[k] = 0.0
+                else:
+                    Y2[k] = X2[K2[-1]]
+            else:
+                m = (X2[K2[i2]] - X2[K2[i2-1]])/(K2[i2]-K2[i2-1])
+                b = X2[K1[i2]] - m*K1[i2]
+                Y2[k] = m*k + b
+    return Y1,Y2

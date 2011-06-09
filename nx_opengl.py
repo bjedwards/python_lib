@@ -19,11 +19,11 @@ def draw_opengl(G,
                 node_size=20,
                 node_color=(1.,0.,0.,1.),
                 node_cmap=cm.jet,
-                node_border_size=3,
+                node_border_size=1,
                 node_border_color=(0.,0.,0.,1.),
                 node_border_cmap=cm.jet,
                 edgelist=None,
-                edge_color=(0.,0.,0.,1.),
+                edge_color=(0.,0.,0.,0.5),
                 edge_cmap=cm.jet,
                 edge_style='-',
                 edge_thickness=1.0,
@@ -430,18 +430,18 @@ def graph_rend_func(window,
     GL.glEnable(GL.GL_LINE_SMOOTH)
     GL.glEnable(GL.GL_DEPTH_TEST)
     # Draw the edges
-    draw_edges(pos,edgelist,edge_color,edge_style,edge_thickness)
-    # Draw the arrows on top of the edges
-    if with_arrows:
-        draw_arrows(pos,
-                    edgelist,
-                    edge_color,
-                    arrow_points,
-                    arrow_size,
-                    1/window.scale,
-                    window.lights,
-                    fancy_arrow)
-    #Draw the nodes on top of those
+    if with_edge_labels:
+        draw_edge_labels(pos,
+                         edgelist,
+                         edge_labels,
+                         edge_label_font,
+                         edge_label_color)
+    if with_node_labels:
+        draw_node_labels(pos,
+                         nodelist,
+                         node_labels,
+                         node_label_font,
+                         node_label_color)
     draw_nodes(pos,
                nodelist,
                node_color,
@@ -451,24 +451,26 @@ def graph_rend_func(window,
                1/window.scale,
                fancy_nodes,
                window.lights)
+    if with_arrows:
+        draw_arrows(pos,
+                    edgelist,
+                    edge_color,
+                    arrow_points,
+                    arrow_size,
+                    1/window.scale,
+                    window.lights,
+                    fancy_arrow)
+    draw_edges(pos,edgelist,edge_color,edge_style,edge_thickness)
+    # Draw the arrows on top of the edges
+    
+    #Draw the nodes on top of those
+    
     #labels on top of everything
-    if with_node_labels:
-        draw_node_labels(pos,
-                         nodelist,
-                         node_labels,
-                         node_label_font,
-                         node_label_color)
-    if with_edge_labels:
-        draw_edge_labels(pos,
-                         edgelist,
-                         edge_labels,
-                         edge_label_font,
-                         edge_label_color)
-    GL.glEnable(GL.GL_DEPTH_TEST)
+     
 
 def draw_edges(pos,edgelist,edge_color,edge_style,edge_thickness):
     GL.glEnable(GL.GL_LINE_STIPPLE)
-    GL.glDisable(GL.GL_DEPTH_TEST)
+    #GL.glDisable(GL.GL_DEPTH_TEST)
     k = 0
     for (i,j) in edgelist:
         GL.glLineWidth(edge_thickness[k])
@@ -479,7 +481,7 @@ def draw_edges(pos,edgelist,edge_color,edge_style,edge_thickness):
         GL.glVertex(*tuple(pos[j]))
         GL.glEnd()
         k+=1
-    GL.glEnable(GL.GL_DEPTH_TEST)
+    #GL.glEnable(GL.GL_DEPTH_TEST)
 
 def draw_arrows(pos,
                 edgelist,
@@ -490,7 +492,7 @@ def draw_arrows(pos,
                 lights,
                 fancy):
 
-    GL.glDisable(GL.GL_DEPTH_TEST)
+    #GL.glDisable(GL.GL_DEPTH_TEST)
     if lights:
         GL.glEnable(GL.GL_LIGHTING)
     k = 0
@@ -549,10 +551,10 @@ def draw_arrows(pos,
         k+=1
     if lights:
         GL.glDisable(GL.GL_LIGHTING)
-    GL.glEnable(GL.GL_DEPTH_TEST)
+    #GL.glEnable(GL.GL_DEPTH_TEST)
 
 def draw_node_labels(pos,nodelist,node_labels,node_label_font,node_label_colors):
-    GL.glDisable(GL.GL_DEPTH_TEST)
+    #GL.glDisable(GL.GL_DEPTH_TEST)
     GL.glColor(*node_label_colors[0]) #Seems to be a bug
     i = 0
     for n in nodelist:
@@ -560,10 +562,10 @@ def draw_node_labels(pos,nodelist,node_labels,node_label_font,node_label_colors)
         GL.glColor(*node_label_colors[i])
         GLUT.glutBitmapString(node_label_font[i],node_labels[i])
         i+=1
-    GL.glEnable(GL.GL_DEPTH_TEST)
+    #GL.glEnable(GL.GL_DEPTH_TEST)
 
 def draw_edge_labels(pos,edgelist,edge_labels,edge_label_font,edge_label_colors):
-    GL.glDisable(GL.GL_DEPTH_TEST)
+    #GL.glDisable(GL.GL_DEPTH_TEST)
     GL.glColor(*edge_label_colors[0]) #Seems to be a bug
     k = 0
     for (i,j) in edgelist:
@@ -575,7 +577,7 @@ def draw_edge_labels(pos,edgelist,edge_labels,edge_label_font,edge_label_colors)
         GL.glColor(*edge_label_colors[k])
         GLUT.glutBitmapString(edge_label_font[k],edge_labels[k])
         k+=1
-    GL.glEnable(GL.GL_DEPTH_TEST)
+    #GL.glEnable(GL.GL_DEPTH_TEST)
         
 def draw_nodes(pos,
                nodelist,
@@ -586,7 +588,7 @@ def draw_nodes(pos,
                scale,
                fancy,
                lights):
-    GL.glDisable(GL.GL_DEPTH_TEST)
+    #GL.glDisable(GL.GL_DEPTH_TEST)
     i = 0
     if fancy:
         vp = GL.glGetIntegerv(GL.GL_VIEWPORT)
@@ -615,19 +617,19 @@ def draw_nodes(pos,
             if lights:
                 GL.glDisable(GL.GL_LIGHTING)
         else:                   
-            GL.glPointSize(node_size[i]+node_border_size[i])
-            GL.glBegin(GL.GL_POINTS)
-            GL.glColor(*node_border_color[i])
-            GL.glVertex(*tuple(pos[n]))
-            GL.glEnd()
-
             GL.glPointSize(node_size[i])
             GL.glBegin(GL.GL_POINTS)
             GL.glColor(*node_color[i])
             GL.glVertex(*tuple(pos[n]))
             GL.glEnd()
+
+            GL.glPointSize(node_size[i]+node_border_size[i])
+            GL.glBegin(GL.GL_POINTS)
+            GL.glColor(*node_border_color[i])
+            GL.glVertex(*tuple(pos[n]))
+            GL.glEnd()
         i+=1
-    GL.glEnable(GL.GL_DEPTH_TEST)
+    #GL.glEnable(GL.GL_DEPTH_TEST)
 
 
 if __name__ == "__main__":
