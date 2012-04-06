@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 import stats.general as st
 
 def plot_tuples(l,*args,**kwargs):
@@ -108,3 +109,12 @@ def plot_dual_y_date(dates,
     ax1.plot_date(dates,ys1,*args1,**kwargs1)
     ax2.plot_date(dates,ys2,*args2,**kwargs2)
     return ax1,ax2
+
+def scatter3d(xs,ys,zs,*args,**kwargs):
+    fig = plt.gcf()
+    ax = fig.gca()
+    if 'xlim3d' not in ax.properties():
+        ax = fig.add_subplot(111,projection='3d')
+    ax.scatter(xs,ys,zs,*args,**kwargs)
+    plt.draw()
+

@@ -183,7 +183,7 @@ smet_kw = {'metric_func':nx.s_metric,
            'parallel':True,
            'processes':None}
 
-assort_kw = {'metric_func':nx.degree_assortativity,
+assort_kw = {'metric_func':nx.degree_assortativity_coefficient,
              'metric_name':'Degree Assortativity',
              'comp_funcs':{'Absolute Error':lambda x1,x2: abs(x1-x2),
                          'Relative Error':lambda x1,x2: abs(x1-x2)/float(abs(x1))},

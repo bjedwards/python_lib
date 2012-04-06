@@ -24,7 +24,7 @@ def rand_continuous(alpha,xmin):
     return  xmin*(1-r)**(-1/(alpha-1))
 
 def discrete_neg_log_likelihood(a,xmin,xs):
-    return float(len(xs)*np.log(special.zeta(a,xmin)) + a*sum([np.log(x) for x in xs]))
+    return len(xs)*np.log(special.zeta(a,xmin)) + a*np.sum(np.log(xs))
 
 def continuous_max_likelihood(xs,xmin):
     return 1.0 + len(xs)*(1/sum([np.log(float(x)/xmin) for x in xs]))

@@ -1,3 +1,7 @@
+import os
+import threading
+import multiprocessing
+
 
 try:
     import OpenGL.GLUT as GLUT
@@ -6,10 +10,15 @@ try:
 except ImportError:
     raise ImportError("Need working versions of PyOpenGL with GL,GLU,and GLUT")
 
-import os
-
+try:
+    from PIL import Image
+except:
+    try:
+        import Image
+    except:
+        raise ImportError('Cannot import suitable image libary, you will not be able to save images. Install PIL or Image')
+    
 class gl_window(object):
-
     """ General Class object to create an openGL window. Window can be
     either 2 or 3 dimensional. Creates orthographic projection with
     some sensible settings, and the best I could do for lighting. The
@@ -73,6 +82,16 @@ class gl_window(object):
                 to save it as, otherwise it will default to 'pdf'
     save_file_type: string
                   : Format to save file in.
+    thread_func : function
+                  This function allows communication with the running
+                  gl_window through any means. ZeroMQ sockets are great
+                  It should take a gl_window as it's first argument
+    **data      : dict
+                  The other keyword arguments that are stored as data in
+                  in the window. This allows the render func to access
+                  aribitrary data in the gl_window. This is a repository,
+                  so that the thread_func can recieve information and modify
+                  this dictionary, and the render func can use this information.
     """
 
 
@@ -84,68 +103,70 @@ class gl_window(object):
                  refresh=15,
                  background_color = (0.,0.,0.,0.),
                  render_func=lambda window: None,
-                 rf_args=(),
-                 rf_kwargs = {},
-                 save_file='./',
-                 save_file_type=None):
-        
-        pid = os.fork() # Hack to get interpetor back
-        if not pid==0:
-            return None
-        self.mouse_down = False
-        self.mouse_old = [0., 0.]
-        self.rotate = [0., 0., 0.]
-        self.translate = [0., 0., 0.]
-        self.scale = 1.0
-        self.dim=dim
+                 comm_thread=lambda window: None,
+                 save_path='./',
+                 save_file_type=None,
+                 **data):
 
+        self.data = data
+
+        self._mouse_down = False
+        self._mouse_old = [0., 0.]
+        self._rotate = [0., 0., 0.]
+        self._translate = [0., 0., 0.]
+        self._scale = 1.0
+        self._dim=dim
+        self.title = title
+        self._render_func = render_func
+        self.refresh = refresh
+        self.background_color = background_color
+        
         # grab the file extension if its there.
-        split_path_ext = os.path.splitext(save_file)
-        self.save_file = split_path_ext[0]
+        split_path_ext = os.path.splitext(save_path)
+        self.save_path = split_path_ext[0]
         if save_file_type is None:
             self.save_file_ext = split_path_ext[1]
             if self.save_file_ext == '':
-                self.save_file_ext = '.png'
+                self.save_file_ext = '.pdf'
         else:
             self.save_file_ext = save_file_type
-        self.save_count = 0
+        self._save_count = 0
 
-        self.width = width
-        self.height = height
-        self.lights = False
+        self._width = width
+        self._height = height
+
+        self._comm_thread = comm_thread
         
-         
-
-        GLUT.glutInit()
-
-        # Some window attributes
-        GLUT.glutInitDisplayMode(GLUT.GLUT_RGBA | GLUT.GLUT_DOUBLE)
-        GLUT.glutInitWindowSize(self.width, self.height)
-        GLUT.glutInitWindowPosition(0, 0)
-        self.win = GLUT.glutCreateWindow(title)
-
-        # OpenGL callbacks
-        GLUT.glutDisplayFunc(self.draw(render_func,*rf_args,**rf_kwargs))
-        GLUT.glutKeyboardFunc(self.on_key)
-        GLUT.glutMouseFunc(self.on_click)
-        GLUT.glutMotionFunc(self.on_mouse_motion)
-        GLUT.glutCloseFunc(self.on_exit)
-        GLUT.glutTimerFunc(refresh, self.timer, refresh)
-
-        self.glinit()
-        # Clean the slate
-        GL.glClearColor(*background_color)
-        # and start
-        GLUT.glutMainLoop()
-
+        self._glut_proc = multiprocessing.Process(target=self.glinit)
+        self._glut_proc.start()
         
 
     def glinit(self):
+        self._sock_thread = threading.Thread(target=self._comm_thread,args=(self,))
+        self._sock_thread.start()
+        
+        GLUT.glutInit()
+        GLUT.glutSetOption(GLUT.GLUT_ACTION_ON_WINDOW_CLOSE,
+                           GLUT.GLUT_ACTION_GLUTMAINLOOP_RETURNS)
+        # Some window attributes
+        GLUT.glutInitDisplayMode(GLUT.GLUT_RGBA | GLUT.GLUT_DOUBLE)
+        GLUT.glutInitWindowSize(self._width, self._height)
+        GLUT.glutInitWindowPosition(0, 0)
+        self._win = GLUT.glutCreateWindow(self.title)
+
+        # OpenGL callbacks
+        GLUT.glutDisplayFunc(self._draw(self._render_func))
+        GLUT.glutKeyboardFunc(self._on_key)
+        GLUT.glutMouseFunc(self._on_click)
+        GLUT.glutMotionFunc(self._on_mouse_motion)
+        GLUT.glutCloseFunc(self._on_exit)
+        GLUT.glutTimerFunc(self.refresh, self._timer, self.refresh)
+
         #set up 2d or 3d viewport in nice orthographic projection
-        GL.glViewport(0, 0, self.width, self.height)
+        GL.glViewport(0, 0, self._width, self._height)
         GL.glMatrixMode(GL.GL_PROJECTION)
         GL.glLoadIdentity()
-        if self.dim==3:
+        if self._dim==3:
             GL.glOrtho(-1.,1.,-1,1.,-1000.,1000.)
             GL.glMatrixMode(GL.GL_MODELVIEW)
         else:
@@ -157,183 +178,115 @@ class gl_window(object):
         GL.glEnable(GL.GL_LINE_SMOOTH)
         GL.glEnable(GL.GL_POLYGON_SMOOTH)
         GL.glEnable(GL.GL_BLEND)
-        GL.glBlendFunc(GL.GL_SRC_ALPHA,GL.GL_ONE_MINUS_SRC_ALPHA)
+        GL.glBlendFunc(GL.GL_ONE,GL.GL_ONE_MINUS_SRC_ALPHA)
         GL.glHint(GL.GL_LINE_SMOOTH_HINT,GL.GL_NICEST)
         GL.glHint(GL.GL_POINT_SMOOTH_HINT,GL.GL_NICEST)
         GL.glHint(GL.GL_POLYGON_SMOOTH_HINT,GL.GL_NICEST)
 
+        #Clear Everything and call the main loop
+        GL.glClearColor(*self.background_color)
+        self._window_open =True
+        GLUT.glutMainLoop()
 
     # Timer callback
-    def timer(self, t):
-        GLUT.glutTimerFunc(t, self.timer, t)
+    def _timer(self, t):
+        GLUT.glutTimerFunc(t, self._timer, t)
         GLUT.glutPostRedisplay()
 
     # Kill the window and the child process that spawned it.
-    def on_exit(x):
-        os._exit(0)
-
+    def _on_exit(self):
+        GLUT.glutLeaveMainLoop()
+        
     # handles some keys.
-    def on_key(self, *args):
-        ESCAPE = '\033'
-        if args[0] == ESCAPE or args[0] == 'q':
-            os._exit(0)
+    def _on_key(self, *args):
+        if args[0] == 'q':
+            self._on_exit()
         elif args[0] == 'r':
-            self.rotate = [0., 0., 0.]
-            self.translate = [0., 0., 0.]
-            self.scale = 1.0
-        elif args[0] == 'l':
-            if self.lights:
-                self.lights = False
-            else:
-                self.lights = True
+            self._rotate = [0., 0., 0.]
+            self._translate = [0., 0., 0.]
+            self._scale = 1.0
         elif args[0] == 's':
-            try:
-                from PIL import Image
-            except:
-                try:
-                    import Image
-                except:
-                    raise ImportError("Cannot Find appropriate Image Library, for Saving")
             vp = GL.glGetIntegerv(GL.GL_VIEWPORT)
             pixel_array = GL.glReadPixels(0,0,vp[2],vp[3],GL.GL_RGB,GL.GL_UNSIGNED_BYTE)
             pilImage = Image.fromstring(mode="RGB",size=(vp[3],vp[2]),data=pixel_array)
             pilImage = pilImage.transpose(Image.FLIP_TOP_BOTTOM)
-            pilImage.save(self.save_file + str(self.save_count) + '.'  + self.save_file_ext)
-            self.save_count += 1 
+            pilImage.save(self.save_path + str(self._save_count) + '.'  + self.save_file_ext)
+            self._save_count += 1
             
     # Handle the clicks, and scale or update as necessary
-    def on_click(self, button, state, x, y):
+    def _on_click(self, button, state, x, y):
         if state == GLUT.GLUT_DOWN:
-            self.mouse_down = True
-            self.button = button
-            if self.button == 3 or self.button == 5:
-                self.scale *= 1.1
-            if self.button == 4 or self.button == 6:
-                self.scale *= 0.9
+            self._mouse_down = True
+            self._button = button
+            if self._button == 3 or self._button == 5:
+                self._scale *= 1.1
+            if self._button == 4 or self._button == 6:
+                self._scale *= 0.9
         else:
-            self.mouse_down = False
-        self.mouse_old[0] = x
-        self.mouse_old[1] = y
+            self._mouse_down = False
+        self._mouse_old[0] = x
+        self._mouse_old[1] = y
 
     # Figure out rotation and translation amounts
-    def on_mouse_motion(self, x, y):
-        dx = x - self.mouse_old[0]
-        dy = y - self.mouse_old[1]
-        if self.mouse_down and self.button == 0: #left button
-            if self.dim == 3:
-                self.rotate[0] += dy * .2
-                self.rotate[1] += dx * .2
+    def _on_mouse_motion(self, x, y):
+        dx = x - self._mouse_old[0]
+        dy = y - self._mouse_old[1]
+        if self._mouse_down and self._button == 0: #left button
+            if self._dim == 3:
+                self._rotate[0] += dy * .2
+                self._rotate[1] += dx * .2
             else:
                 #This fixes the rotation in 2d so we always rotate
                 # the way the user drags
                 vp = GL.glGetIntegerv(GL.GL_VIEWPORT)
                 if x > vp[2]/2:
-                    self.rotate[0] -= dy * .2
+                    self._rotate[0] -= dy * .2
                 else:
-                    self.rotate[1] += dy * .2
+                    self._rotate[1] += dy * .2
                 if y > vp[3]/2:
-                    self.rotate[1] += dx * .2
+                    self._rotate[1] += dx * .2
                 else:
-                    self.rotate[1] -= dx * .2
-        elif self.mouse_down and self.button == 2: #right button
-            self.translate[0] += dx * .001
-            self.translate[1] -= dy * .001
-        self.mouse_old[0] = x
-        self.mouse_old[1] = y
+                    self._rotate[1] -= dx * .2
+        elif self._mouse_down and self._button == 2: #right button
+            self._translate[0] += dx * .001
+            self._translate[1] -= dy * .001
+        self._mouse_old[0] = x
+        self._mouse_old[1] = y
 
     ###END GL CALLBACKS
 
 
-    def draw(self,f,*args,**kwargs):
+    def _draw(self,f):
         def draw_func():
             #Clear the current buffer
             GL.glFlush()
             GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
             # Render stuff
-            f(self,*args,**kwargs)
+            f(self)
             # Load the identity matrix
             GL.glMatrixMode(GL.GL_MODELVIEW)
             GL.glLoadIdentity()
 
             #Transform the view in the appropriate way
-            if self.dim == 3:
+            if self._dim == 3:
                 GL.glTranslatef(0.,0.,-2)
-                GL.glTranslatef(self.translate[0],
-                                self.translate[1],
-                                self.translate[2])
-                GL.glRotatef(self.rotate[0], 1, 0, 0)
-                GL.glRotatef(self.rotate[1], 0, 1, 0) 
+                GL.glTranslatef(self._translate[0],
+                                self._translate[1],
+                                self._translate[2])
+                GL.glRotatef(self._rotate[0], 1, 0, 0)
+                GL.glRotatef(self._rotate[1], 0, 1, 0) 
 
             else:
                 GL.glTranslatef(0.,0.,0.)
-                GL.glTranslatef(self.translate[0], self.translate[1],0.0)
-                GL.glRotatef(self.rotate[0], 0, 0, 1)
-                GL.glRotatef(self.rotate[1], 0, 0, 1) 
+                GL.glTranslatef(self._translate[0], self._translate[1],0.0)
+                GL.glRotatef(self._rotate[0], 0, 0, 1)
+                GL.glRotatef(self._rotate[1], 0, 0, 1) 
 
             # Scale
-            GL.glScale(self.scale,self.scale,self.scale)
+            GL.glScale(self._scale,self._scale,self._scale)
             #More niceness
             GL.glShadeModel(GL.GL_SMOOTH)
-            # Lights if they are there
-            if self.lights:
-                GL.glLightfv(GL.GL_LIGHT0,GL.GL_POSITION, (1.,1.,1.))
-                GL.glLightfv(GL.GL_LIGHT0, GL.GL_AMBIENT, (0.,0.,0.,.5))
-                GL.glLightfv(GL.GL_LIGHT0, GL.GL_DIFFUSE, (.4,.4,.4,.4))
-                GL.glLightfv(GL.GL_LIGHT0, GL.GL_SPECULAR,(.4,.4,.4,.4))
-                GL.glLightModelfv(GL.GL_LIGHT_MODEL_AMBIENT,(.2,.2,.2,1.0))
-                GL.glEnable(GL.GL_LIGHT0)
-                GL.glEnable(GL.GL_COLOR_MATERIAL)
-                GL.glColorMaterial(GL.GL_FRONT_AND_BACK,GL.GL_AMBIENT_AND_DIFFUSE)
-                GL.glMaterialfv(GL.GL_FRONT_AND_BACK,GL.GL_SPECULAR,(1.,1.,1.,1.))
-                GL.glMaterialfv(GL.GL_FRONT_AND_BACK,GL.GL_EMISSION,(0.,0.,0.,1.))
+
             # Swap out the new rendering.
             GLUT.glutSwapBuffers()
         return draw_func
-
-    
-def test_2d_render_func(window):
-    GL.glEnable(GL.GL_POINT_SMOOTH)
-    GL.glEnable(GL.GL_LINE_SMOOTH)
-    GL.glEnable(GL.GL_LINE_STIPPLE)
-    points = [(0.,0.),(.25,.25),(.25,-.25),(-.25,.25),(-.25,-.25)]
-    GL.glColor(0.,1.,0.)
-    GL.glPointSize(20)
-    GL.glBegin(GL.GL_POINTS)
-    for p in points:
-        GL.glVertex(*p)
-    GL.glEnd()
-    GL.glLineStipple(1,0x0101)
-    GL.glBegin(GL.GL_LINES)
-    for p in points:
-        for q in points:
-            GL.glVertex(*p)
-            GL.glVertex(*q)
-    GL.glEnd()
-    return
-
-def test_3d_render_func(window):
-    GL.glEnable(GL.GL_POINT_SMOOTH)
-    GL.glColor(0.,1.,0.)
-    GL.glPointSize(20)
-    GL.glBegin(GL.GL_POINTS)
-    GL.glVertex(0.,0.)
-    GL.glVertex(.25,.25,.25)
-    GL.glVertex(.25,.25,-.25)
-    GL.glVertex(.25,-.25,.25)
-    GL.glVertex(.25,-.25,-.25)
-    GL.glVertex(-.25,.25,.25)
-    GL.glVertex(-.25,.25,-.25)
-    GL.glVertex(-.25,-.25,.25)
-    GL.glVertex(-.25,-.25,-.25)
-    GL.glEnd()
-    return
-
-def test_2d():
-    gl_window(dim=2,background_color=(0.,0.,0.,0.),render_func=test_2d_render_func)
-
-def test_3d():
-    gl_window(dim=3,render_func=test_3d_render_func)
-
-if __name__ == "__main__":
-    test_3d()
-    test_2d()

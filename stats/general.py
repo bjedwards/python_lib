@@ -254,6 +254,40 @@ def KL_divergence(xs,ys,pdf_x=None,pdf_y=None,data_range=None):
             PQ.append((pdf_x[k],pdf_y[k]))
     return np.sum([p*np.log(float(p)/float(q)) for (p,q) in PQ if q>0 and p>0])
 
+def KL_CDF_divergence(xs,ys,cdf_x=None,cdf_y=None,data_range=None):
+    if cdf_x is None and cdf_y is None and data_range is None:
+        data_range = list(set(xs)) + list(set(ys))
+    if cdf_x is None:
+        cdf_x = cum_density_func(xs,norm=True,rank=False,data_range=data_range)
+    if cdf_y is None:
+        cdf_y = cum_density_func(ys,norm=True,rank=False,data_range=data_range)
+
+    PQ = []
+    for k in data_range:
+        PQ.append((cdf_x[k],cdf_y[k]))
+    return np.sum([p*np.log(float(p)/float(q)) for (p,q) in PQ if q>0 and p>0])
+
+def JS_CDF_divergence(xs,ys,cdf_x=None,cdf_y=None,data_range=None):
+    if cdf_x is None and cdf_y is None and data_range is None:
+        data_range = list(set(xs)) + list(set(ys))
+    if cdf_x is None:
+        cdf_x = cum_density_func(xs,norm=True,rank=False,data_range=data_range)
+    if cdf_y is None:
+        cdf_y = cum_density_func(ys,norm=True,rank=False,data_range=data_range)
+    M = {}
+    for i in cdf_x:
+        M[i] = .5*(cdf_x[i] + cdf_y[i])
+    return .5*KL_CDF_divergence(None,
+                                None,
+                                cdf_x=cdf_x,
+                                cdf_y=M,
+                                data_range=data_range) + \
+           .5*KL_CDF_divergence(None,
+                                None,
+                                cdf_x=cdf_y,
+                                cdf_y=M,
+                                data_range=data_range)
+    
 def JS_divergence(xs,ys,pdf_x=None,pdf_y=None,data_range=None):
     """Return the Jensen-Shannon Divergence of two probability density
     functions P and Q. The divergence is defined as
@@ -318,6 +352,7 @@ def JS_divergence(xs,ys,pdf_x=None,pdf_y=None,data_range=None):
                             pdf_x=pdf_y,
                             pdf_y=M,
                             data_range=data_range)
+    
 def rmse(xs,ys,include_absent=True,default_x_value=None,default_y_value=None):
     """ Calculate the root mean square error between two dictionairs
     calculated as:
@@ -453,6 +488,43 @@ def area_diff(X1,X2,interpolate=True,ccdf=False):
             area_bet += .5*b1*h*(b1/(b0+b1))
         area_bet
     return area_bet/total_area
+
+def cramer_von_mises(xs,ys,interpolate=True,ccdf=False,report_p=True):
+    data_range = sorted(list(set(xs + ys)))
+    ccdf_x = comp_cum_distribution(xs, norm=True, data_range=data_range)
+    ccdf_y = comp_cum_distribution(ys, norm=True, data_range=data_range)
+    if interpolate:
+        Y1,Y2 = interpolate_dicts(ccdf_x,ccdf_y,ccdf)
+    else:
+        if sorted(xs.keys()) != sorted(ys.keys()):
+            raise Exception("Dictionaries must have same keys if not \
+                             interpolating!")
+        else:
+            Y1 = xs
+            Y2 = ys
+    data_range = sorted(Y1.keys())
+    area_bet = 0.0
+    for i in range(1,len(data_range)):
+        x0 = data_range[i-1]
+        x1 = data_range[i]
+        b0 = (Y1[x0]-Y2[x0])**2
+        b1 = (Y1[x1]-Y2[x1])**2
+        h = x1 - x0
+        area_bet += .5*h*(b0+b1)
+    if report_p:
+        t = area_bet*len(data_range)
+        p = ''
+        if t > .347:
+            p += '*'
+        if t > .461:
+            p+='*'
+        if t > .743:
+            p+='*'
+        if t > 1.167:
+            p+='*'
+        return (area_bet,t,p)
+    else:
+        return area_bet
     
 def interpolate_dicts(X1,X2,ccdf=False):
     data_range = sorted(list(set(X1.keys()+X2.keys())))
